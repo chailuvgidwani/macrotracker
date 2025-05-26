@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Macro Tracker Dashboard</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -120,11 +120,23 @@
             font-family: monospace;
             font-size: 12px;
         }
+        .debug-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Macro Tracker Dashboard</h1>
+        
+        <div class="debug-info" id="debugInfo" style="display: none;">
+            <strong>Debug Info:</strong> <span id="debugMessage"></span>
+        </div>
         
         <div class="targets">
             <h2>Daily Targets</h2>
@@ -175,9 +187,11 @@
 
         <div class="import-section">
             <h2>Import Data from Claude</h2>
-            <p>Paste the formatted data from Claude here:</p>
-            <textarea id="importData" rows="10" placeholder="Paste your formatted data here..."></textarea>
-            <button onclick="importData()">Import Data</button>
+            <p>Paste the formatted data from Claude here (one entry per line, pipe-separated):</p>
+            <textarea id="importData" rows="10" placeholder="Example:
+2025-05-26|14:00|Chicken Breast|250|45|0|5
+2025-05-26|14:00|Brown Rice|220|4|46|2"></textarea>
+            <button onclick="importFoodData()">Import Data</button>
         </div>
 
         <div class="add-entry">
@@ -189,7 +203,7 @@
             <input type="number" id="protein" placeholder="Protein (g)">
             <input type="number" id="carbs" placeholder="Carbs (g)">
             <input type="number" id="fat" placeholder="Fat (g)">
-            <button onclick="addEntry()">Add Entry</button>
+            <button onclick="addFoodEntry()">Add Entry</button>
         </div>
 
         <h2>Food Log</h2>
@@ -211,6 +225,15 @@
     </div>
 
     <script>
+        // Debug function
+        function showDebug(message) {
+            const debugInfo = document.getElementById('debugInfo');
+            const debugMessage = document.getElementById('debugMessage');
+            debugInfo.style.display = 'block';
+            debugMessage.textContent = message;
+            console.log('Debug:', message);
+        }
+
         // Daily targets
         const targets = {
             calories: 3300,
@@ -220,7 +243,13 @@
         };
 
         // Initialize food log from localStorage
-        let foodLog = JSON.parse(localStorage.getItem('macroTrackerLog') || '[]');
+        let foodLog = [];
+        try {
+            foodLog = JSON.parse(localStorage.getItem('macroTrackerLog') || '[]');
+            showDebug(`Loaded ${foodLog.length} entries from storage`);
+        } catch (e) {
+            showDebug('Error loading data: ' + e.message);
+        }
 
         // Set today's date as default
         document.getElementById('date').valueAsDate = new Date();
@@ -229,307 +258,361 @@
         let dailyCaloriesChart, macroBreakdownChart, weeklyAverageChart, proteinTrendChart;
 
         function saveData() {
-            localStorage.setItem('macroTrackerLog', JSON.stringify(foodLog));
+            try {
+                localStorage.setItem('macroTrackerLog', JSON.stringify(foodLog));
+                showDebug('Data saved successfully');
+            } catch (e) {
+                showDebug('Error saving data: ' + e.message);
+            }
         }
 
-        function addEntry() {
-            const date = document.getElementById('date').value;
-            const time = document.getElementById('time').value;
-            const food = document.getElementById('food').value;
-            const calories = parseFloat(document.getElementById('calories').value) || 0;
-            const protein = parseFloat(document.getElementById('protein').value) || 0;
-            const carbs = parseFloat(document.getElementById('carbs').value) || 0;
-            const fat = parseFloat(document.getElementById('fat').value) || 0;
+        function addFoodEntry() {
+            try {
+                const date = document.getElementById('date').value;
+                const time = document.getElementById('time').value;
+                const food = document.getElementById('food').value;
+                const calories = parseFloat(document.getElementById('calories').value) || 0;
+                const protein = parseFloat(document.getElementById('protein').value) || 0;
+                const carbs = parseFloat(document.getElementById('carbs').value) || 0;
+                const fat = parseFloat(document.getElementById('fat').value) || 0;
 
-            if (!date || !food) {
-                alert('Please fill in date and food item');
-                return;
-            }
-
-            foodLog.push({ date, time, food, calories, protein, carbs, fat });
-            saveData();
-            updateTable();
-            updateCharts();
-            updateStats();
-
-            // Clear form
-            document.getElementById('food').value = '';
-            document.getElementById('calories').value = '';
-            document.getElementById('protein').value = '';
-            document.getElementById('carbs').value = '';
-            document.getElementById('fat').value = '';
-        }
-
-        function importData() {
-            const importText = document.getElementById('importData').value.trim();
-            if (!importText) {
-                alert('Please paste data to import');
-                return;
-            }
-
-            const lines = importText.split('\n');
-            let imported = 0;
-
-            for (const line of lines) {
-                const parts = line.split('|').map(p => p.trim());
-                if (parts.length >= 7) {
-                    const date = parts[0];
-                    const time = parts[1];
-                    const food = parts[2];
-                    const calories = parseFloat(parts[3]) || 0;
-                    const protein = parseFloat(parts[4]) || 0;
-                    const carbs = parseFloat(parts[5]) || 0;
-                    const fat = parseFloat(parts[6]) || 0;
-
-                    if (date && food) {
-                        foodLog.push({ date, time, food, calories, protein, carbs, fat });
-                        imported++;
-                    }
+                if (!date || !food) {
+                    alert('Please fill in date and food item');
+                    return;
                 }
-            }
 
-            if (imported > 0) {
+                foodLog.push({ date, time, food, calories, protein, carbs, fat });
                 saveData();
                 updateTable();
                 updateCharts();
                 updateStats();
-                document.getElementById('importData').value = '';
-                alert(`Successfully imported ${imported} entries`);
-            } else {
-                alert('No valid entries found in the import data');
+
+                // Clear form
+                document.getElementById('food').value = '';
+                document.getElementById('calories').value = '';
+                document.getElementById('protein').value = '';
+                document.getElementById('carbs').value = '';
+                document.getElementById('fat').value = '';
+                
+                showDebug('Entry added successfully');
+            } catch (e) {
+                showDebug('Error adding entry: ' + e.message);
+            }
+        }
+
+        function importFoodData() {
+            try {
+                const importText = document.getElementById('importData').value.trim();
+                if (!importText) {
+                    alert('Please paste data to import');
+                    return;
+                }
+
+                const lines = importText.split('\n');
+                let imported = 0;
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    
+                    const parts = line.split('|').map(p => p.trim());
+                    if (parts.length >= 7) {
+                        const date = parts[0];
+                        const time = parts[1];
+                        const food = parts[2];
+                        const calories = parseFloat(parts[3]) || 0;
+                        const protein = parseFloat(parts[4]) || 0;
+                        const carbs = parseFloat(parts[5]) || 0;
+                        const fat = parseFloat(parts[6]) || 0;
+
+                        if (date && food) {
+                            foodLog.push({ date, time, food, calories, protein, carbs, fat });
+                            imported++;
+                        }
+                    }
+                }
+
+                if (imported > 0) {
+                    saveData();
+                    updateTable();
+                    updateCharts();
+                    updateStats();
+                    document.getElementById('importData').value = '';
+                    alert(`Successfully imported ${imported} entries`);
+                    showDebug(`Imported ${imported} entries`);
+                } else {
+                    alert('No valid entries found. Make sure each line has: Date|Time|Food|Calories|Protein|Carbs|Fat');
+                }
+            } catch (e) {
+                showDebug('Error importing data: ' + e.message);
             }
         }
 
         function updateTable() {
-            const tbody = document.getElementById('logBody');
-            tbody.innerHTML = '';
-            
-            // Sort by date and time (newest first)
-            const sortedLog = [...foodLog].sort((a, b) => {
-                const dateA = new Date(a.date + ' ' + a.time);
-                const dateB = new Date(b.date + ' ' + b.time);
-                return dateB - dateA;
-            });
+            try {
+                const tbody = document.getElementById('logBody');
+                tbody.innerHTML = '';
+                
+                // Sort by date and time (newest first)
+                const sortedLog = [...foodLog].sort((a, b) => {
+                    const dateA = new Date(a.date + ' ' + a.time);
+                    const dateB = new Date(b.date + ' ' + b.time);
+                    return dateB - dateA;
+                });
 
-            sortedLog.forEach(entry => {
-                const row = tbody.insertRow();
-                row.insertCell(0).textContent = entry.date;
-                row.insertCell(1).textContent = entry.time;
-                row.insertCell(2).textContent = entry.food;
-                row.insertCell(3).textContent = entry.calories;
-                row.insertCell(4).textContent = entry.protein;
-                row.insertCell(5).textContent = entry.carbs;
-                row.insertCell(6).textContent = entry.fat;
-            });
+                sortedLog.forEach(entry => {
+                    const row = tbody.insertRow();
+                    row.insertCell(0).textContent = entry.date;
+                    row.insertCell(1).textContent = entry.time;
+                    row.insertCell(2).textContent = entry.food;
+                    row.insertCell(3).textContent = entry.calories;
+                    row.insertCell(4).textContent = entry.protein;
+                    row.insertCell(5).textContent = entry.carbs;
+                    row.insertCell(6).textContent = entry.fat;
+                });
+            } catch (e) {
+                showDebug('Error updating table: ' + e.message);
+            }
         }
 
         function updateStats() {
-            const today = new Date().toISOString().split('T')[0];
-            const todayEntries = foodLog.filter(entry => entry.date === today);
-            
-            const todayTotals = todayEntries.reduce((acc, entry) => {
-                acc.calories += entry.calories;
-                acc.protein += entry.protein;
-                acc.carbs += entry.carbs;
-                acc.fat += entry.fat;
-                return acc;
-            }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const todayEntries = foodLog.filter(entry => entry.date === today);
+                
+                const todayTotals = todayEntries.reduce((acc, entry) => {
+                    acc.calories += entry.calories;
+                    acc.protein += entry.protein;
+                    acc.carbs += entry.carbs;
+                    acc.fat += entry.fat;
+                    return acc;
+                }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
-            document.getElementById('todayCalories').textContent = Math.round(todayTotals.calories);
-            document.getElementById('todayCaloriesPercent').textContent = `${Math.round(todayTotals.calories / targets.calories * 100)}% of target`;
-            
-            document.getElementById('todayProtein').textContent = `${Math.round(todayTotals.protein)}g`;
-            document.getElementById('todayProteinPercent').textContent = `${Math.round(todayTotals.protein / targets.protein * 100)}% of target`;
-            
-            document.getElementById('todayCarbs').textContent = `${Math.round(todayTotals.carbs)}g`;
-            document.getElementById('todayCarbohydratesPercent').textContent = `${Math.round(todayTotals.carbs / targets.carbs * 100)}% of target`;
-            
-            document.getElementById('todayFat').textContent = `${Math.round(todayTotals.fat)}g`;
-            document.getElementById('todayFatPercent').textContent = `${Math.round(todayTotals.fat / targets.fat * 100)}% of target`;
+                document.getElementById('todayCalories').textContent = Math.round(todayTotals.calories);
+                document.getElementById('todayCaloriesPercent').textContent = `${Math.round(todayTotals.calories / targets.calories * 100)}% of target`;
+                
+                document.getElementById('todayProtein').textContent = `${Math.round(todayTotals.protein)}g`;
+                document.getElementById('todayProteinPercent').textContent = `${Math.round(todayTotals.protein / targets.protein * 100)}% of target`;
+                
+                document.getElementById('todayCarbs').textContent = `${Math.round(todayTotals.carbs)}g`;
+                document.getElementById('todayCarbohydratesPercent').textContent = `${Math.round(todayTotals.carbs / targets.carbs * 100)}% of target`;
+                
+                document.getElementById('todayFat').textContent = `${Math.round(todayTotals.fat)}g`;
+                document.getElementById('todayFatPercent').textContent = `${Math.round(todayTotals.fat / targets.fat * 100)}% of target`;
+            } catch (e) {
+                showDebug('Error updating stats: ' + e.message);
+            }
         }
 
         function updateCharts() {
-            // Get last 7 days of data
-            const last7Days = [];
-            const today = new Date();
-            for (let i = 6; i >= 0; i--) {
-                const date = new Date(today);
-                date.setDate(date.getDate() - i);
-                last7Days.push(date.toISOString().split('T')[0]);
+            try {
+                // Check if Chart.js is loaded
+                if (typeof Chart === 'undefined') {
+                    showDebug('Chart.js not loaded yet. Charts will appear once loaded.');
+                    return;
+                }
+
+                // Get last 7 days of data
+                const last7Days = [];
+                const today = new Date();
+                for (let i = 6; i >= 0; i--) {
+                    const date = new Date(today);
+                    date.setDate(date.getDate() - i);
+                    last7Days.push(date.toISOString().split('T')[0]);
+                }
+
+                // Calculate daily totals
+                const dailyTotals = {};
+                last7Days.forEach(date => {
+                    dailyTotals[date] = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+                });
+
+                foodLog.forEach(entry => {
+                    if (dailyTotals[entry.date]) {
+                        dailyTotals[entry.date].calories += entry.calories;
+                        dailyTotals[entry.date].protein += entry.protein;
+                        dailyTotals[entry.date].carbs += entry.carbs;
+                        dailyTotals[entry.date].fat += entry.fat;
+                    }
+                });
+
+                // Update Daily Calories Chart
+                const ctx1 = document.getElementById('dailyCaloriesChart').getContext('2d');
+                if (dailyCaloriesChart) dailyCaloriesChart.destroy();
+                dailyCaloriesChart = new Chart(ctx1, {
+                    type: 'bar',
+                    data: {
+                        labels: last7Days.map(d => new Date(d).toLocaleDateString('en-US', { weekday: 'short' })),
+                        datasets: [{
+                            label: 'Calories',
+                            data: last7Days.map(date => dailyTotals[date].calories),
+                            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }, {
+                            label: 'Target',
+                            data: last7Days.map(() => targets.calories),
+                            type: 'line',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 2,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                // Update Today's Macro Breakdown
+                const todayDate = new Date().toISOString().split('T')[0];
+                const todayData = dailyTotals[todayDate] || { protein: 0, carbs: 0, fat: 0 };
+                
+                const ctx2 = document.getElementById('macroBreakdownChart').getContext('2d');
+                if (macroBreakdownChart) macroBreakdownChart.destroy();
+                macroBreakdownChart = new Chart(ctx2, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Protein', 'Carbs', 'Fat'],
+                        datasets: [{
+                            data: [todayData.protein, todayData.carbs, todayData.fat],
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.5)',
+                                'rgba(54, 162, 235, 0.5)',
+                                'rgba(255, 206, 86, 0.5)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+
+                // Calculate weekly averages
+                const weeklyTotals = Object.values(dailyTotals).reduce((acc, day) => {
+                    acc.calories += day.calories;
+                    acc.protein += day.protein;
+                    acc.carbs += day.carbs;
+                    acc.fat += day.fat;
+                    return acc;
+                }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+
+                const weeklyAvg = {
+                    calories: weeklyTotals.calories / 7,
+                    protein: weeklyTotals.protein / 7,
+                    carbs: weeklyTotals.carbs / 7,
+                    fat: weeklyTotals.fat / 7
+                };
+
+                // Update Weekly Average Chart
+                const ctx3 = document.getElementById('weeklyAverageChart').getContext('2d');
+                if (weeklyAverageChart) weeklyAverageChart.destroy();
+                weeklyAverageChart = new Chart(ctx3, {
+                    type: 'radar',
+                    data: {
+                        labels: ['Calories', 'Protein', 'Carbs', 'Fat'],
+                        datasets: [{
+                            label: 'Weekly Average',
+                            data: [
+                                (weeklyAvg.calories / targets.calories) * 100,
+                                (weeklyAvg.protein / targets.protein) * 100,
+                                (weeklyAvg.carbs / targets.carbs) * 100,
+                                (weeklyAvg.fat / targets.fat) * 100
+                            ],
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2
+                        }, {
+                            label: 'Target (100%)',
+                            data: [100, 100, 100, 100],
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            r: {
+                                beginAtZero: true,
+                                max: 150
+                            }
+                        }
+                    }
+                });
+
+                // Update Protein Trend Chart
+                const ctx4 = document.getElementById('proteinTrendChart').getContext('2d');
+                if (proteinTrendChart) proteinTrendChart.destroy();
+                proteinTrendChart = new Chart(ctx4, {
+                    type: 'line',
+                    data: {
+                        labels: last7Days.map(d => new Date(d).toLocaleDateString('en-US', { weekday: 'short' })),
+                        datasets: [{
+                            label: 'Protein Intake',
+                            data: last7Days.map(date => dailyTotals[date].protein),
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 2,
+                            tension: 0.4
+                        }, {
+                            label: 'Target',
+                            data: last7Days.map(() => targets.protein),
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                showDebug('Error updating charts: ' + e.message);
             }
-
-            // Calculate daily totals
-            const dailyTotals = {};
-            last7Days.forEach(date => {
-                dailyTotals[date] = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-            });
-
-            foodLog.forEach(entry => {
-                if (dailyTotals[entry.date]) {
-                    dailyTotals[entry.date].calories += entry.calories;
-                    dailyTotals[entry.date].protein += entry.protein;
-                    dailyTotals[entry.date].carbs += entry.carbs;
-                    dailyTotals[entry.date].fat += entry.fat;
-                }
-            });
-
-            // Update Daily Calories Chart
-            const ctx1 = document.getElementById('dailyCaloriesChart').getContext('2d');
-            if (dailyCaloriesChart) dailyCaloriesChart.destroy();
-            dailyCaloriesChart = new Chart(ctx1, {
-                type: 'bar',
-                data: {
-                    labels: last7Days.map(d => new Date(d).toLocaleDateString('en-US', { weekday: 'short' })),
-                    datasets: [{
-                        label: 'Calories',
-                        data: last7Days.map(date => dailyTotals[date].calories),
-                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1
-                    }, {
-                        label: 'Target',
-                        data: last7Days.map(() => targets.calories),
-                        type: 'line',
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        borderWidth: 2,
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-
-            // Update Today's Macro Breakdown
-            const today = new Date().toISOString().split('T')[0];
-            const todayData = dailyTotals[today] || { protein: 0, carbs: 0, fat: 0 };
-            
-            const ctx2 = document.getElementById('macroBreakdownChart').getContext('2d');
-            if (macroBreakdownChart) macroBreakdownChart.destroy();
-            macroBreakdownChart = new Chart(ctx2, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Protein', 'Carbs', 'Fat'],
-                    datasets: [{
-                        data: [todayData.protein, todayData.carbs, todayData.fat],
-                        backgroundColor: [
-                            'rgba(255, 99, 132, 0.5)',
-                            'rgba(54, 162, 235, 0.5)',
-                            'rgba(255, 206, 86, 0.5)'
-                        ],
-                        borderColor: [
-                            'rgba(255, 99, 132, 1)',
-                            'rgba(54, 162, 235, 1)',
-                            'rgba(255, 206, 86, 1)'
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false
-                }
-            });
-
-            // Calculate weekly averages
-            const weeklyTotals = Object.values(dailyTotals).reduce((acc, day) => {
-                acc.calories += day.calories;
-                acc.protein += day.protein;
-                acc.carbs += day.carbs;
-                acc.fat += day.fat;
-                return acc;
-            }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
-
-            const weeklyAvg = {
-                calories: weeklyTotals.calories / 7,
-                protein: weeklyTotals.protein / 7,
-                carbs: weeklyTotals.carbs / 7,
-                fat: weeklyTotals.fat / 7
-            };
-
-            // Update Weekly Average Chart
-            const ctx3 = document.getElementById('weeklyAverageChart').getContext('2d');
-            if (weeklyAverageChart) weeklyAverageChart.destroy();
-            weeklyAverageChart = new Chart(ctx3, {
-                type: 'radar',
-                data: {
-                    labels: ['Calories', 'Protein', 'Carbs', 'Fat'],
-                    datasets: [{
-                        label: 'Weekly Average',
-                        data: [
-                            (weeklyAvg.calories / targets.calories) * 100,
-                            (weeklyAvg.protein / targets.protein) * 100,
-                            (weeklyAvg.carbs / targets.carbs) * 100,
-                            (weeklyAvg.fat / targets.fat) * 100
-                        ],
-                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 2
-                    }, {
-                        label: 'Target (100%)',
-                        data: [100, 100, 100, 100],
-                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        r: {
-                            beginAtZero: true,
-                            max: 150
-                        }
-                    }
-                }
-            });
-
-            // Update Protein Trend Chart
-            const ctx4 = document.getElementById('proteinTrendChart').getContext('2d');
-            if (proteinTrendChart) proteinTrendChart.destroy();
-            proteinTrendChart = new Chart(ctx4, {
-                type: 'line',
-                data: {
-                    labels: last7Days.map(d => new Date(d).toLocaleDateString('en-US', { weekday: 'short' })),
-                    datasets: [{
-                        label: 'Protein Intake',
-                        data: last7Days.map(date => dailyTotals[date].protein),
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 2,
-                        tension: 0.4
-                    }, {
-                        label: 'Target',
-                        data: last7Days.map(() => targets.protein),
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        borderWidth: 2,
-                        borderDash: [5, 5],
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
         }
 
+        // Make functions globally accessible
+        window.addFoodEntry = addFoodEntry;
+        window.importFoodData = importFoodData;
+
         // Initialize on load
-        updateTable();
-        updateCharts();
-        updateStats();
+        window.addEventListener('DOMContentLoaded', (event) => {
+            showDebug('Page loaded, initializing...');
+            updateTable();
+            updateStats();
+            
+            // Wait a bit for Chart.js to load
+            setTimeout(() => {
+                updateCharts();
+            }, 1000);
+        });
+
+        // Also try to update charts when Chart.js loads
+        window.addEventListener('load', (event) => {
+            if (typeof Chart !== 'undefined') {
+                updateCharts();
+            }
+        });
     </script>
 </body>
 </html>
